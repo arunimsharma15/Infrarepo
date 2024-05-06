@@ -22,12 +22,43 @@ data "template_file" "user_data" {
   template = <<-EOF
     #!/bin/bash
     sudo yum update -y
+    sudo mkdir /opt/ansible
+    sudo chown ec2-user:ec2-user /opt/ansible
+    sudo chmod 700 /opt/ansible
     sudo amazon-linux-extras install epel -y
     sudo yum install ansible -y
     echo "Ansible version:"
     /usr/bin/ansible --version
   EOF
 }
+
+resource "null_resource" "ansible_hosts" {
+  depends_on = [aws_instance.test-server]
+
+  provisioner "local-exec" {
+    interpreter = ["C:\\Users\\arunshar\\AppData\\Local\\Programs\\Git\\bin\\bash.exe", "-c"]
+    command = <<-EOF
+      sleep 60
+      scp -o StrictHostKeyChecking=no -i "/c/Users/arunshar/OneDrive - Capgemini/Documents/Learning/K8_Personal/ec2connect.pem" "/c/Users/arunshar/OneDrive - Capgemini/Documents/Learning/K8_Personal/ec2connect.pem" ec2-user@${aws_instance.test-server["ansible"].public_ip}:/opt/ansible/
+      scp -o StrictHostKeyChecking=no -i "/c/Users/arunshar/OneDrive - Capgemini/Documents/Learning/K8_Personal/ec2connect.pem" "/c/Users/arunshar/OneDrive - Capgemini/Documents/Learning/K8_Personal/Infrarepo/infradetails/jenkins_install.yml" ec2-user@${aws_instance.test-server["ansible"].public_ip}:/opt/ansible/
+      ssh -o StrictHostKeyChecking=no -i "/c/Users/arunshar/OneDrive - Capgemini/Documents/Learning/K8_Personal/ec2connect.pem" ec2-user@${aws_instance.test-server["ansible"].public_ip} '
+      echo "[jenkins-master]" | sudo tee /opt/ansible/hosts
+      echo "${aws_instance.test-server["jenkins-master"].public_ip}" | sudo tee -a /opt/ansible/hosts
+      echo "[jenkins-master:vars]" | sudo tee -a /opt/ansible/hosts
+      echo "ansible_user=ec2-user" | sudo tee -a /opt/ansible/hosts
+      echo "ansible_ssh_private_key_file=/opt/ansible/ec2connect.pem" | sudo tee -a /opt/ansible/hosts
+      echo "[jenkins-slave]" | sudo tee -a /opt/ansible/hosts
+      echo "${aws_instance.test-server["jenkins-slave"].public_ip}" | sudo tee -a /opt/ansible/hosts
+      echo "[jenkins-slave:vars]" | sudo tee -a /opt/ansible/hosts
+      echo "ansible_user=ec2-user" | sudo tee -a /opt/ansible/hosts
+      echo "ansible_ssh_private_key_file=/opt/ansible/ec2connect.pem" | sudo tee -a /opt/ansible/hosts
+      sudo chmod 400 /opt/ansible/ec2connect.pem
+      echo $PATH && source /etc/profile && ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i /opt/ansible/hosts /opt/ansible/jenkins_install.yml
+      '
+    EOF
+  }
+}
+
 
 resource "aws_security_group" "test-sg" {
   name        = "test-sg"

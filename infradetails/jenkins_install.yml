@@ -1,0 +1,67 @@
+---
+- name: Install Jenkins
+  hosts: jenkins-master
+  become: yes
+
+  tasks:
+    - name: Install required packages
+      yum:
+        name:
+          - git
+          - wget
+        state: present
+
+    - name: Import Jenkins public key
+      rpm_key:
+        state: present
+        key: https://pkg.jenkins.io/redhat-stable/jenkins.io.key
+
+    - name: Add Jenkins repository
+      get_url:
+        url: https://pkg.jenkins.io/redhat-stable/jenkins.repo
+        dest: /etc/yum.repos.d/jenkins.repo
+
+    - name: Install Java 11
+      command: amazon-linux-extras install java-openjdk11 -y
+
+    - name: Install Jenkins
+      command: yum install jenkins -y --nogpgcheck
+      register: jenkins_install
+
+    - name: Create Jenkins configuration file
+      file:
+        path: /etc/sysconfig/jenkins
+        state: touch
+      when: jenkins_install.changed
+
+    - name: Update Jenkins service configuration
+      lineinfile:
+        path: /etc/sysconfig/jenkins
+        regexp: "^JENKINS_JAVA_HOME="
+        line: 'JENKINS_JAVA_HOME="/usr/lib/jvm/java-11-openjdk"'
+      when: jenkins_install.changed
+
+    - name: Reload systemd
+      systemd:
+        daemon_reload: yes
+
+    - name: Start Jenkins service
+      systemd:
+        name: jenkins
+        state: started
+        enabled: yes
+
+    - name: Wait for Jenkins to start
+      wait_for:
+        port: 8080
+        delay: 10
+        timeout: 120
+
+    - name: Get Jenkins initial password
+      slurp:
+        src: /var/lib/jenkins/secrets/initialAdminPassword
+      register: jenkins_initial_password
+
+    - name: Print Jenkins initial password
+      debug:
+        msg: "Jenkins initial password: {{ jenkins_initial_password.content | b64decode }}"
